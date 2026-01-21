@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game - HTML версия</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 720px;
+            height: 480px;
+            border: 2px solid #333;
+            background-color: #000;
+        }
+        
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .score {
+            position: absolute;
+            top: 20px;
+            font-size: 70px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        #player1Score {
+            left: 20px;
+            color: #5a9fd6;
+        }
+        
+        #player2Score {
+            right: 20px;
+            color: #d65a5a;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .center-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent 0%, #333 10%, #333 90%, transparent 100%);
+            opacity: 0.5;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="720" height="480"></canvas>
+        <div class="center-line"></div>
+        <div id="player1Score" class="score">0</div>
+        <div id="player2Score" class="score">0</div>
+        <div class="controls">Управление: W - вверх, S - вниз</div>
+        <div class="instructions">Pong Game | Слева игрок, справа - AI</div>
+    </div>
+
+    <script>
+        // Класс Игрока (как в твоём коде)
+        class Player {
+            constructor(x, y, speed, color) {
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 100;
+                this.speed = speed;
+                this.score = 0;
+                this.color = color;
+            }
+            
+            get hitbox() {
+                return {
+                    x: this.x,
+                    y: this.y,
+                    width: this.width,
+                    height: this.height,
+                    left: this.x,
+                    right: this.x + this.width,
+                    top: this.y,
+                    bottom: this.y + this.height,
+                    centerx: this.x + this.width / 2,
+                    centery: this.y + this.height / 2
+                };
+            }
+            
+            move(ball) {
+                // Автопилот для правого игрока (AI)
+                if (ball.hitbox.centery < this.hitbox.centery) {
+                    this.y -= this.speed;
+                } else {
+                    this.y += this.speed;
+                }
+                
+                // Ограничение движения по краям
+                if (this.y < 0) this.y = 0;
+                if (this.y + this.height > 480) this.y = 480 - this.height;
+            }
+            
+            // Метод для управления игроком с клавиатуры
+            movePlayer() {
+                if (keys['w'] || keys['W']) {
+                    this.y -= this.speed;
+                }
+                if (keys['s'] || keys['S']) {
+                    this.y += this.speed;
+                }
+                
+                // Ограничение движения по краям
+                if (this.y < 0) this.y = 0;
+                if (this.y + this.height > 480) this.y = 480 - this.height;
+            }
+            
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // Класс Мяча (как в твоём коде)
+        class Ball {
+            constructor(x, y, speed) {
+                this.x = x;
+                this.y = y;
+                this.size = 34;
+                this.speed = speed;
+                this.speedX = speed;
+                this.speedY = speed;
+                this.randomX = 1;
+                this.randomY = 1;
+            }
+            
+            get hitbox() {
+                return {
+                    x: this.x,
+                    y: this.y,
+                    width: this.size,
+                    height: this.size,
+                    left: this.x,
+                    right: this.x + this.size,
+                    top: this.y,
+                    bottom: this.y + this.size,
+                    centerx: this.x + this.size / 2,
+                    centery: this.y + this.size / 2
+                };
+            }
+            
+            move(player1, player2) {
+                // Движение мяча
+                this.x += this.speedX * this.randomX;
+                this.y += this.speedY * this.randomY;
+                
+                // Отскок от верхней и нижней границы
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.speedY = Math.abs(this.speedY);
+                }
+                if (this.y + this.size > 480) {
+                    this.y = 480 - this.size;
+                    this.speedY = -Math.abs(this.speedY);
+                }
+                
+                // Проверка столкновения с левой ракеткой (игрок)
+                if (this.hitbox.left < player1.hitbox.right && 
+                    this.hitbox.right > player1.hitbox.left &&
+                    this.hitbox.top < player1.hitbox.bottom && 
+                    this.hitbox.bottom > player1.hitbox.top) {
+                    
+                    this.speedX = Math.abs(this.speedX);
+                    this.randomX = Math.random() * 2 + 1; // 1-3
+                    this.randomY = Math.random() * 2 + 1; // 1-3
+                    
+                    // Добавляем немного случайности в угол отскока
+                    let hitPos = (this.hitbox.centery - player1.hitbox.centery) / (player1.height / 2);
+                    this.speedY = hitPos * 5;
+                }
+                
+                // Проверка столкновения с правой ракеткой (AI)
+                if (this.hitbox.left < player2.hitbox.right && 
+                    this.hitbox.right > player2.hitbox.left &&
+                    this.hitbox.top < player2.hitbox.bottom && 
+                    this.hitbox.bottom > player2.hitbox.top) {
+                    
+                    this.speedX = -Math.abs(this.speedX);
+                    this.randomX = Math.random() * 2 + 1; // 1-3
+                    this.randomY = Math.random() * 2 + 1; // 1-3
+                    
+                    // Добавляем немного случайности в угол отскока
+                    let hitPos = (this.hitbox.centery - player2.hitbox.centery) / (player2.height / 2);
+                    this.speedY = hitPos * 5;
+                }
+                
+                // Гол в левые ворота
+                if (this.x < 0) {
+                    player2.score++;
+                    document.getElementById('player2Score').textContent = player2.score;
+                    this.reset();
+                    return 'player2';
+                }
+                
+                // Гол в правые ворота
+                if (this.x + this.size > 720) {
+                    player1.score++;
+                    document.getElementById('player1Score').textContent = player1.score;
+                    this.reset();
+                    return 'player1';
+                }
+                
+                return null;
+            }
+            
+            reset() {
+                this.x = 720 / 2 - this.size / 2;
+                this.y = 480 / 2 - this.size / 2;
+                this.speedX = (Math.random() > 0.5 ? 1 : -1) * this.speed;
+                this.speedY = (Math.random() - 0.5) * 2 * this.speed;
+                this.randomX = 1;
+                this.randomY = 1;
+            }
+            
+            draw(ctx) {
+                ctx.fillStyle = '#37a037';
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+                
+                // Добавляем немного стиля мячу
+                ctx.fillStyle = '#2a7a2a';
+                ctx.beginPath();
+                ctx.arc(this.x + this.size/2, this.y + this.size/2, this.size/3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Инициализация игры
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Создание объектов (как в твоём коде)
+        const player1 = new Player(50, 240 - 50, 7, '#6b78dc');  // Синий игрок
+        const player2 = new Player(720 - 50 - 30, 240 - 50, 4, '#642323');  // Красный AI
+        const ball = new Ball(360 - 17, 240 - 17, 4);
+        
+        // Отслеживание нажатых клавиш
+        const keys = {};
+        
+        // Игровой цикл
+        function gameLoop() {
+            // Очистка холста
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Управление игроком
+            player1.movePlayer();
+            
+            // Движение AI
+            player2.move(ball);
+            
+            // Движение мяча
+            ball.move(player1, player2);
+            
+            // Отрисовка объектов
+            player1.draw(ctx);
+            player2.draw(ctx);
+            ball.draw(ctx);
+            
+            // Рисуем разделительную линию
+            ctx.strokeStyle = '#333';
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Запрашиваем следующий кадр
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Обработчики событий клавиатуры
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+        
+        // Запуск игры
+        gameLoop();
+        
+        // Сброс игры по нажатию R
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                player1.score = 0;
+                player2.score = 0;
+                document.getElementById('player1Score').textContent = '0';
+                document.getElementById('player2Score').textContent = '0';
+                ball.reset();
+            }
+        });
+    </script>
+</body>
+</html>
